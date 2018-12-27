@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -224,6 +225,57 @@ func Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 	})
+}
+
+// Loginecho - fungsi untuk login
+func Loginecho(c echo.Context) error {
+	var user credential
+	err := c.Bind(&user)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error)
+	}
+
+	loginData := User{
+		Email:    user.Email,
+		Password: user.Password,
+	}
+
+	db, err := getConnection()
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error)
+	}
+
+	defer db.Close()
+
+	res, err := loginData.CekEmailPass(db)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error)
+	} else {
+		token := jwt.New(jwt.SigningMethodHS256)
+
+		// Set claims
+		claims := token.Claims.(jwt.MapClaims)
+		claims["id"] = res.Id
+		claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+		// Generate encoded token and send it as response.
+		t, err := token.SignedString([]byte("secret"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{
+			"token": t,
+		})
+	}
+
+	return echo.ErrUnauthorized
+}
+
+// Restricted func
+func Restricted(c echo.Context) error {
+	user := c.Get("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	id_user := claims["id"].(string)
+	return c.String(http.StatusOK, "Welcome "+id_user+"!")
 }
 
 // Auth - fungsi untuk auth
